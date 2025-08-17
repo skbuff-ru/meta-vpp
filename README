@@ -1,0 +1,6 @@
+meta-vpp
+========
+
+This layer provides support for building Vector Packet Processing (VPP) within the Yocto Project.
+
+It enables integration of VPP into embedded Linux images using Yocto, with support for DPDK, systemd, and Python bindings.
