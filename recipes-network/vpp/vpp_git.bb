@@ -10,10 +10,10 @@ SRC_URI += "file://0001-disable-python-api.patch \
             file://vpp-startup.conf \
             file://vpp.service"
 
-DEPENDS = "dpdk openssl libpcap numactl \
+DEPENDS = "openssl libpcap \
            python3-native ninja-native cmake-native python3-ply-native"
 
-RDEPENDS:${PN} += "bash kmod iproute2"
+RDEPENDS:${PN} += "kmod"
 
 inherit python3native pkgconfig systemd useradd
 
