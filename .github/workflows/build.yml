@@ -138,7 +138,21 @@ jobs:
           echo 'NO_RECOMMENDATIONS = "1"' >> conf/local.conf
           echo 'EXTRA_IMAGE_FEATURES = ""' >> conf/local.conf
           echo 'RM_OLD_IMAGE = "1"' >> conf/local.conf
-          echo 'DISTRO_FEATURES:remove = "x11 wayland bluetooth pulseaudio"' >> conf/local.conf
+          echo 'DISTRO_FEATURES:remove = "x11 wayland bluetooth pulseaudio qemu-usermode qemu-system"' >> conf/local.conf
+          echo 'PACKAGECONFIG:remove = "qemu"' >> conf/local.conf
+          echo 'PACKAGECONFIG:remove:class-native = "qemu"' >> conf/local.conf
+          echo 'DEPENDS:remove:class-native = "qemu-native"' >> conf/local.conf
+          echo 'RDEPENDS:${PN}:remove = "qemu-native"' >> conf/local.conf
+          echo 'IMAGE_INSTALL:remove = "qemu-system-qemux86 qemu-system-arm qemu-system-aarch64"' >> conf/local.conf
+          echo 'ASSUME_PROVIDED += "bzip2-native git-native grep-native diffstat-native patch-native perl-native-runtime python-native-runtime tar-native"' >> conf/local.conf
+          echo 'GLIBC_GENERATE_LOCALES = "en_US.UTF-8"' >> conf/local.conf
+          echo 'IMAGE_LINGUAS = "en-us"' >> conf/local.conf
+          echo 'EXTRA_OEMAKE_class-native += " -DCMAKE_BUILD_TYPE=Release"' >> conf/local.conf
+          echo 'EXTRA_OECMAKE_class-native += " -DBUILD_TESTING=OFF -DENABLE_TESTS=OFF"' >> conf/local.conf
+          echo 'PACKAGECONFIG_class-native = " minimal"' >> conf/local.conf
+          echo 'KERNEL_FEATURES:remove = "features/netfilter/netfilter.scc features/sound/sound.scc features/bluetooth/bluetooth.scc"' >> conf/local.conf
+          echo 'KERNEL_MODULE_AUTOLOAD:remove = "usb-storage usbhid"' >> conf/local.conf
+          echo 'KERNEL_EXTRA_FEATURES:remove = "debug-tweaks"' >> conf/local.conf
           echo 'SSTATE_DIR = "${TOPDIR}/sstate-cache"' >> conf/local.conf
           echo 'DL_DIR = "${TOPDIR}/downloads"' >> conf/local.conf
           echo 'TMPDIR = "${TOPDIR}/tmp"' >> conf/local.conf
