@@ -158,6 +158,17 @@ jobs:
           echo 'TMPDIR = "${TOPDIR}/tmp"' >> conf/local.conf
           cat conf/local.conf
 
+      - name: Restore sstate-cache and downloads from cache
+        uses: actions/cache@v4
+        id: restore-cache
+        with:
+          path: |
+            $HOME/vpp-build/poky/build/sstate-cache
+            $HOME/vpp-build/poky/build/downloads
+          key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
+          restore-keys: |
+            ${{ runner.os }}-sstate-
+
       - name: Build VPP
         run: |
           sudo locale-gen en_US.UTF-8
@@ -167,15 +178,18 @@ jobs:
           . oe-init-build-env build
           bitbake vpp
 
-      - name: Upload built packages
-        uses: actions/upload-artifact@v4
+      - name: Save sstate-cache and downloads to cache
         if: success()
+        uses: actions/cache/save@v4
         with:
-          name: vpp-packages
-          path: $BUILD_DIR/poky/build/tmp/deploy/ipk/qemux86-64/vpp_*.ipk
+          path: |
+            $HOME/vpp-build/poky/build/sstate-cache
+            $HOME/vpp-build/poky/build/downloads
+          key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
 
       - name: Cleanup after build
         if: always()
         run: |
-          sudo umount $HOME/vpp-build
-          rm -f $HOME/vpp-build-zfs/btrfs-image.img
+          sync
+          lsof +D $HOME/vpp-build || echo "No processes found using vpp-build"
+          sudo umount -l $HOME/vpp-build || echo "Already unmounted or failed, but continuing..."
