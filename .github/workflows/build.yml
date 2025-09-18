@@ -1,4 +1,4 @@
-name: Build VPP with Yocto (v7)
+name: Build VPP with Yocto (v8)
 
 on:
   push:
@@ -153,18 +153,15 @@ jobs:
           echo 'KERNEL_FEATURES:remove = "features/netfilter/netfilter.scc features/sound/sound.scc features/bluetooth/bluetooth.scc"' >> conf/local.conf
           echo 'KERNEL_MODULE_AUTOLOAD:remove = "usb-storage usbhid"' >> conf/local.conf
           echo 'KERNEL_EXTRA_FEATURES:remove = "debug-tweaks"' >> conf/local.conf
-          echo 'SSTATE_DIR = "${TOPDIR}/sstate-cache"' >> conf/local.conf
-          echo 'DL_DIR = "${TOPDIR}/downloads"' >> conf/local.conf
-          echo 'TMPDIR = "${TOPDIR}/tmp"' >> conf/local.conf
           cat conf/local.conf
 
       - name: Restore sstate-cache and downloads from cache
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         id: restore-cache
         with:
           path: |
-            $HOME/vpp-build/poky/build/sstate-cache
-            $HOME/vpp-build/poky/build/downloads
+            ${{ env.BUILD_DIR }}/poky/build/sstate-cache
+            ${{ env.BUILD_DIR }}/poky/build/downloads
           key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
           restore-keys: |
             ${{ runner.os }}-sstate-
@@ -178,13 +175,22 @@ jobs:
           . oe-init-build-env build
           bitbake vpp
 
+      - name: Verify sstate-cache exists before saving
+        if: success()
+        run: |
+          echo "=== DEBUG: Checking cache paths ==="
+          ls -la ${{ env.BUILD_DIR }}/poky/build/sstate-cache || echo "sstate-cache does NOT exist!"
+          ls -la ${{ env.BUILD_DIR }}/poky/build/downloads || echo "downloads does NOT exist!"
+          du -sh ${{ env.BUILD_DIR }}/poky/build/sstate-cache
+          du -sh ${{ env.BUILD_DIR }}/poky/build/downloads
+
       - name: Save sstate-cache and downloads to cache
         if: success()
-        uses: actions/cache/save@v4
+        uses: actions/cache@v3
         with:
           path: |
-            $HOME/vpp-build/poky/build/sstate-cache
-            $HOME/vpp-build/poky/build/downloads
+            ${{ env.BUILD_DIR }}/poky/build/sstate-cache
+            ${{ env.BUILD_DIR }}/poky/build/downloads
           key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
 
       - name: Cleanup after build
