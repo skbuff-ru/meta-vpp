@@ -85,10 +85,10 @@ jobs:
           echo "=== AFTER: Disk usage ==="
           df -h /
 
-      - name: Create compressed Btrfs image (31GB)
+      - name: Create compressed Btrfs image (23GB)
         run: |
           mkdir -p $HOME/vpp-build-zfs
-          fallocate -l 31G $HOME/vpp-build-zfs/btrfs-image.img
+          fallocate -l 23G $HOME/vpp-build-zfs/btrfs-image.img
           sudo mkfs.btrfs -L yocto-build $HOME/vpp-build-zfs/btrfs-image.img
           sudo mkdir -p $HOME/vpp-build
           sudo mount -o compress=zstd $HOME/vpp-build-zfs/btrfs-image.img $HOME/vpp-build
@@ -153,15 +153,17 @@ jobs:
           echo 'KERNEL_FEATURES:remove = "features/netfilter/netfilter.scc features/sound/sound.scc features/bluetooth/bluetooth.scc"' >> conf/local.conf
           echo 'KERNEL_MODULE_AUTOLOAD:remove = "usb-storage usbhid"' >> conf/local.conf
           echo 'KERNEL_EXTRA_FEATURES:remove = "debug-tweaks"' >> conf/local.conf
+          echo 'SSTATE_DIR = "${HOME}/sstate-cache"' >> conf/local.conf
+          echo 'DL_DIR = "${HOME}/downloads"' >> conf/local.conf
           cat conf/local.conf
 
       - name: Restore sstate-cache and downloads from cache
-        uses: actions/cache@v3
-        id: restore-cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: |
-            ${{ env.BUILD_DIR }}/poky/build/sstate-cache
-            ${{ env.BUILD_DIR }}/poky/build/downloads
+            ${HOME}/sstate-cache
+            ${HOME}/downloads
           key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
           restore-keys: |
             ${{ runner.os }}-sstate-
@@ -175,22 +177,23 @@ jobs:
           . oe-init-build-env build
           bitbake vpp
 
-      - name: Verify sstate-cache exists before saving
+      - name: Verify sstate-cache exists and cleanup
         if: success()
         run: |
-          echo "=== DEBUG: Checking cache paths ==="
-          ls -la ${{ env.BUILD_DIR }}/poky/build/sstate-cache || echo "sstate-cache does NOT exist!"
-          ls -la ${{ env.BUILD_DIR }}/poky/build/downloads || echo "downloads does NOT exist!"
-          du -sh ${{ env.BUILD_DIR }}/poky/build/sstate-cache
-          du -sh ${{ env.BUILD_DIR }}/poky/build/downloads
+          cd $HOME
+          sudo umount $HOME/vpp-build
+          sudo rm -rf $HOME/vpp-build
+          du -sh ${HOME}/sstate-cache
+          du -sh ${HOME}/downloads
 
       - name: Save sstate-cache and downloads to cache
         if: success()
-        uses: actions/cache@v3
+        id: cache-save
+        uses: actions/cache/save@v4
         with:
           path: |
-            ${{ env.BUILD_DIR }}/poky/build/sstate-cache
-            ${{ env.BUILD_DIR }}/poky/build/downloads
+            /home/runner/sstate-cache
+            /home/runner/downloads
           key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
 
       - name: Cleanup after build
