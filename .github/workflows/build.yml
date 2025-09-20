@@ -175,16 +175,23 @@ jobs:
           export LC_ALL=en_US.UTF-8
           cd $BUILD_DIR/poky
           . oe-init-build-env build
-          bitbake vpp
+          #bitbake vpp
+          bitbake busybox 
 
       - name: Verify sstate-cache exists and cleanup
         if: success()
         run: |
           cd $HOME
-          sudo umount $HOME/vpp-build
-          sudo rm -rf $HOME/vpp-build
+          lsof +D "$HOME/vpp-build" | awk 'NR>1 {print $2}' | xargs -r kill -9 2>/dev/null || true
+          sleep 2
+          if mountpoint -q "$HOME/vpp-build"; then
+            sudo umount "$HOME/vpp-build" || true
+          fi
+          rm -rf $HOME/vpp-build-zfs/btrfs-image.img
+          rm -rf $HOME/vpp-build
           du -sh ${HOME}/sstate-cache
           du -sh ${HOME}/downloads
+          df -hl
 
       - name: Save sstate-cache and downloads to cache
         if: success()
