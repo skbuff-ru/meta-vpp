@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025, skbuff.ru
+
 SUMMARY = "VPP Python API bindings"
 DESCRIPTION = "Python bindings for VPP API (vpp-papi)"
 HOMEPAGE = "https://fd.io"
-LICENSE = "Apache-2.0"
+LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${WORKDIR}/git/LICENSE;md5=175792518e4ac015ab6696d16c4f607e"
 
 require vpp-common.inc
