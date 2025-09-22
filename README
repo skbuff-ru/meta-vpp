@@ -4,3 +4,27 @@ meta-vpp
 This layer provides support for building Vector Packet Processing (VPP) within the Yocto Project.
 
 It enables integration of VPP into embedded Linux images using Yocto, with support for DPDK, systemd, and Python bindings.
+
+
+build
+=====
+
+To build vpp openembedded layer you can follow Github Actions script: .github/workflows/build.yml
+
+  ./meta-vpp <- this repo
+  git clone -b scarthgap --depth 1 https://git.yoctoproject.org/poky.git
+  git clone -b scarthgap --depth 1 https://github.com/openembedded/meta-openembedded.git
+  git clone -b scarthgap --depth 1 git://git.yoctoproject.org/meta-dpdk
+
+  cd poky
+  . oe-init-build-env build
+  bitbake-layers add-layer meta-openembedded/meta-oe
+  bitbake-layers add-layer meta-openembedded/meta-python
+  bitbake-layers add-layer meta-openembedded/meta-networking
+  bitbake-layers add-layer meta-dpdk
+  bitbake-layers add-layer meta-vpp
+
+  bitbake vpp
+
+Note: if for some reason you need to disable DPDK for vpp, then configure this in conf/local.conf with
+      extra line: PACKAGECONFIG:remove = "dpdk"
