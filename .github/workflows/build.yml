@@ -155,6 +155,7 @@ jobs:
           echo 'KERNEL_EXTRA_FEATURES:remove = "debug-tweaks"' >> conf/local.conf
           echo 'SSTATE_DIR = "${HOME}/sstate-cache"' >> conf/local.conf
           echo 'DL_DIR = "${HOME}/downloads"' >> conf/local.conf
+          echo 'PACKAGECONFIG:remove = "dpdk"' >> conf/local.conf
           cat conf/local.conf
 
       - name: Restore sstate-cache and downloads from cache
@@ -175,8 +176,7 @@ jobs:
           export LC_ALL=en_US.UTF-8
           cd $BUILD_DIR/poky
           . oe-init-build-env build
-          #bitbake vpp
-          bitbake busybox 
+          bitbake vpp
 
       - name: Verify sstate-cache exists and cleanup
         if: success()
