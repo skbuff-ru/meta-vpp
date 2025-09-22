@@ -1,4 +1,4 @@
-name: Build VPP with Yocto
+name: Build VPP with Yocto (v8)
 
 on:
   push:
@@ -17,82 +17,195 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Install Btrfs tools
         run: |
           sudo apt-get update
+          sudo apt-get install -y --no-install-recommends btrfs-progs
+
+      - name: Free up space by removing unnecessary packages p1
+        run: |
+          echo "=== BEFORE: Disk usage ==="
+          df -h /
+
+          # Remove GUI, desktop, and heavy dev tools
+          sudo apt remove -y \
+            thunderbird firefox chromium gnome-* kde-plasma-desktop rhythmbox \
+            gimp inkscape vlc shotwell transmission-gtk evolution snapd flatpak \
+            printer-driver-* cups* docker-ce docker-ce-cli containerd.io containernetworking-plugins \
+            kubectl azure-cli google-cloud-cli google-cloud-cli-anthoscli google-chrome-stable \
+            microsoft-edge-stable powershell r-base-core mecab-ipadic msbuild vim vim-runtime \
+            nano tmux wireshark tcpdump nmap gdb valgrind strace ltrace \
+            llvm-13 llvm-14 llvm-15 llvm-13-dev llvm-14-dev llvm-15-dev \
+            libclang-cpp13 libclang-cpp14 libclang-cpp15 libclang-common-13-dev \
+            libclang-common-14-dev libclang-common-15-dev libllvm13 libllvm14 libllvm15 \
+            gcc-9 gcc-10 gcc-11 gcc-12 g++-9 g++-10 g++-11 g++-12 gfortran-9 \
+            cpp-9 cpp-10 cpp-11 cpp-12 \
+            postgresql-14 mysql-client-core-8.0 mysql-server-core-8.0 \
+            dotnet-sdk-8.0 dotnet-sdk-9.0 dotnet-runtime-8.0 dotnet-runtime-9.0 \
+            dotnet-targeting-pack-9.0 dotnet-targeting-pack-8.0 aspnetcore-targeting-pack-8.0 \
+            mono-devel mono-utils temurin-8-jdk temurin-11-jdk temurin-17-jdk temurin-21-jdk \
+            linux-azure-6.8-headers-6.8.0-1031 linux-azure-6.8-headers-6.8.0-1034 \
+            linux-image-6.8.0-1034-azure linux-modules-6.8.0-1034-azure \
+            linux-azure-6.8-tools-6.8.0-1031 linux-azure-6.8-tools-6.8.0-1034 \
+            libicu-dev python3-dev \
+            perl-modules-5.34 libperl5.34 ruby3.0-doc libruby3.0 \
+            referenceassemblies-pcl netstandard-targeting-pack-2.1 iso-codes \
+            shellcheck skopeo mercurial-common libz3-4 libx265-199 \
+            libasan5 libstdc++-9-dev libstdc++-10-dev libstdc++-11-dev libstdc++-12-dev \
+            libgcc-9-dev libgcc-10-dev libgcc-11-dev libgcc-12-dev \
+            nginx-core
+
+      - name: Install Yocto build dependencies
+        run: |
+          # Remove the broken PPA version completely
+          sudo apt-get remove --purge -y git git-man
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+
+          # Ensure we're using official Ubuntu repos only
+          sudo add-apt-repository --remove ppa:git-core/ppa || true
+
+          # Update and reinstall from official repos
+          sudo apt-get update
+          sudo apt-get install -y git git-man
           sudo apt-get install -y --no-install-recommends \
-            gawk wget git-core diffstat unzip texinfo gcc-multilib \
+          gawk wget git diffstat unzip texinfo gcc-multilib \
             build-essential chrpath socat cpio python3 python3-pip \
             python3-pexpect xz-utils debianutils iputils-ping libsdl1.2-dev \
             xterm autoconf libtool libncurses5-dev libssl-dev libpcap-dev \
             libnuma-dev ninja-build cmake pkg-config libpython3-dev python3-ply python3-setuptools
+          sudo modprobe btrfs 
 
-      - name: Clean up system space
+      - name: Free up space by removing unnecessary packages p2
         run: |
-          sudo apt-get clean
+          # Clean APT cache and remove orphaned packages
+          sudo apt autoremove --purge -y
+          sudo apt clean
           sudo rm -rf /var/lib/apt/lists/*
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          df -h
+          echo "=== AFTER: Disk usage ==="
+          df -h /
 
-      - name: Clone Yocto layers
+      - name: Create compressed Btrfs image (23GB)
         run: |
-          mkdir -p $HOME/yocto
-          cd $HOME/yocto
+          mkdir -p $HOME/vpp-build-zfs
+          fallocate -l 23G $HOME/vpp-build-zfs/btrfs-image.img
+          sudo mkfs.btrfs -L yocto-build $HOME/vpp-build-zfs/btrfs-image.img
+          sudo mkdir -p $HOME/vpp-build
+          sudo mount -o compress=zstd $HOME/vpp-build-zfs/btrfs-image.img $HOME/vpp-build
+          sudo chown -R runner:runner $HOME/vpp-build
+          df -h $HOME/vpp-build
+          mount | grep btrfs
+          btrfs filesystem usage $HOME/vpp-build
+
+      - name: Set build directory
+        run: |
+          echo "BUILD_DIR=$HOME/vpp-build" >> $GITHUB_ENV
+
+      - name: Clone Yocto layers into BUILD_DIR
+        run: |
+          cd $BUILD_DIR
+          cp -r $GITHUB_WORKSPACE ./meta-vpp
           git clone -b scarthgap --depth 1 https://git.yoctoproject.org/poky.git
+          rm -rf ./poky/.git
           git clone -b scarthgap --depth 1 https://github.com/openembedded/meta-openembedded.git
+          rm -rf meta-openembedded/.git
           git clone -b scarthgap --depth 1 git://git.yoctoproject.org/meta-dpdk
-          cp -r $GITHUB_WORKSPACE $HOME/yocto/meta-vpp
+          rm -rf meta-dpdk/.git
 
-      - name: Copy meta-vpp and initialize environment
+      - name: Initialize Yocto build environment
         run: |
-          cd $HOME/yocto/poky
+          cd $BUILD_DIR/poky
           . oe-init-build-env build
-          pwd
-          ls $HOME/yocto/
-          bitbake-layers add-layer $HOME/yocto/meta-openembedded/meta-oe
-          bitbake-layers add-layer $HOME/yocto/meta-openembedded/meta-python
-          bitbake-layers add-layer $HOME/yocto/meta-openembedded/meta-networking
-          bitbake-layers add-layer $HOME/yocto/meta-dpdk
-          bitbake-layers add-layer $HOME/yocto/meta-vpp
+          bitbake-layers add-layer $BUILD_DIR/meta-openembedded/meta-oe
+          bitbake-layers add-layer $BUILD_DIR/meta-openembedded/meta-python
+          bitbake-layers add-layer $BUILD_DIR/meta-openembedded/meta-networking
+          bitbake-layers add-layer $BUILD_DIR/meta-dpdk
+          bitbake-layers add-layer $BUILD_DIR/meta-vpp
           cat conf/bblayers.conf
 
-      - name: Configure build
+      - name: Configure build for minimal disk usage
         run: |
-          cd $HOME/yocto/poky/build
+          cd $BUILD_DIR/poky/build
           echo 'MACHINE = "qemux86-64"' >> conf/local.conf
           echo 'DISTRO = "poky"' >> conf/local.conf
           echo 'IMAGE_INSTALL:append = " vpp vpp-python-api"' >> conf/local.conf
           echo 'INHERIT += "rm_work"' >> conf/local.conf
-          echo 'BB_NUMBER_THREADS = "2"' >> conf/local.conf
-          echo 'PARALLEL_MAKE = "-j 2"' >> conf/local.conf
+          echo 'BB_NUMBER_THREADS = "4"' >> conf/local.conf
+          echo 'PARALLEL_MAKE = "-j 4"' >> conf/local.conf
           echo 'INHIBIT_PACKAGE_DEBUG_SPLIT = "1"' >> conf/local.conf
           echo 'INHIBIT_PACKAGE_STRIP = "1"' >> conf/local.conf
           echo 'PACKAGE_CLASSES = "package_ipk"' >> conf/local.conf
           echo 'NO_RECOMMENDATIONS = "1"' >> conf/local.conf
           echo 'EXTRA_IMAGE_FEATURES = ""' >> conf/local.conf
           echo 'RM_OLD_IMAGE = "1"' >> conf/local.conf
-          echo 'DISTRO_FEATURES:remove = "x11 wayland bluetooth pulseaudio"' >> conf/local.conf
+          echo 'DISTRO_FEATURES:remove = "x11 wayland bluetooth pulseaudio qemu-usermode qemu-system"' >> conf/local.conf
+          echo 'PACKAGECONFIG:remove = "qemu"' >> conf/local.conf
+          echo 'PACKAGECONFIG:remove:class-native = "qemu"' >> conf/local.conf
+          echo 'DEPENDS:remove:class-native = "qemu-native"' >> conf/local.conf
+          echo 'RDEPENDS:${PN}:remove = "qemu-native"' >> conf/local.conf
+          echo 'IMAGE_INSTALL:remove = "qemu-system-qemux86 qemu-system-arm qemu-system-aarch64"' >> conf/local.conf
+          echo 'ASSUME_PROVIDED += "bzip2-native git-native grep-native diffstat-native patch-native perl-native-runtime python-native-runtime tar-native"' >> conf/local.conf
+          echo 'GLIBC_GENERATE_LOCALES = "en_US.UTF-8"' >> conf/local.conf
+          echo 'IMAGE_LINGUAS = "en-us"' >> conf/local.conf
+          echo 'EXTRA_OEMAKE_class-native += " -DCMAKE_BUILD_TYPE=Release"' >> conf/local.conf
+          echo 'EXTRA_OECMAKE_class-native += " -DBUILD_TESTING=OFF -DENABLE_TESTS=OFF"' >> conf/local.conf
+          echo 'PACKAGECONFIG_class-native = " minimal"' >> conf/local.conf
+          echo 'KERNEL_FEATURES:remove = "features/netfilter/netfilter.scc features/sound/sound.scc features/bluetooth/bluetooth.scc"' >> conf/local.conf
+          echo 'KERNEL_MODULE_AUTOLOAD:remove = "usb-storage usbhid"' >> conf/local.conf
+          echo 'KERNEL_EXTRA_FEATURES:remove = "debug-tweaks"' >> conf/local.conf
+          echo 'SSTATE_DIR = "${HOME}/sstate-cache"' >> conf/local.conf
+          echo 'DL_DIR = "${HOME}/downloads"' >> conf/local.conf
+          echo 'PACKAGECONFIG:remove = "dpdk"' >> conf/local.conf
+          cat conf/local.conf
 
-      - name: Cache sstate and downloads
-        uses: actions/cache@v4
+      - name: Restore sstate-cache and downloads from cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: |
-            $HOME/yocto/poky/downloads
-            $HOME/yocto/poky/sstate-cache
+            ${HOME}/sstate-cache
+            ${HOME}/downloads
           key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
-          restore-keys: ${{ runner.os }}-sstate-
+          restore-keys: |
+            ${{ runner.os }}-sstate-
 
       - name: Build VPP
         run: |
-          cd $HOME/yocto/poky
+          sudo locale-gen en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export LC_ALL=en_US.UTF-8
+          cd $BUILD_DIR/poky
           . oe-init-build-env build
           bitbake vpp
 
-      - name: Upload built packages
-        uses: actions/upload-artifact@v4
+      - name: Verify sstate-cache exists and cleanup
         if: success()
+        run: |
+          cd $HOME
+          lsof +D "$HOME/vpp-build" | awk 'NR>1 {print $2}' | xargs -r kill -9 2>/dev/null || true
+          sleep 2
+          if mountpoint -q "$HOME/vpp-build"; then
+            sudo umount "$HOME/vpp-build" || true
+          fi
+          rm -rf $HOME/vpp-build-zfs/btrfs-image.img
+          rm -rf $HOME/vpp-build
+          du -sh ${HOME}/sstate-cache
+          du -sh ${HOME}/downloads
+          df -hl
+
+      - name: Save sstate-cache and downloads to cache
+        if: success()
+        id: cache-save
+        uses: actions/cache/save@v4
         with:
-          name: vpp-packages
-          path: $HOME/yocto/poky/build/tmp/deploy/ipk/qemux86-64/vpp_*.ipk
+          path: |
+            /home/runner/sstate-cache
+            /home/runner/downloads
+          key: ${{ runner.os }}-sstate-${{ hashFiles('**/layer.conf') }}
+
+      - name: Cleanup after build
+        if: always()
+        run: |
+          sync
+          lsof +D $HOME/vpp-build || echo "No processes found using vpp-build"
+          sudo umount -l $HOME/vpp-build || echo "Already unmounted or failed, but continuing..."
